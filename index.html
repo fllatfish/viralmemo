@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>ウェビングマップ | 発想メモ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Yusei+Magic&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F2ECDD;
+    --paper-line:#DED3AE;
+    --ink:#21201C;
+    --ink-soft:#5b5648;
+    --idea:#F3D98B;
+    --question:#A8D8CF;
+    --action:#E7B0BE;
+    --theme:#B7BEEA;
+    --card:#FFFDF6;
+    --shadow: 0 3px 10px rgba(33,32,28,0.18), 0 1px 0 rgba(33,32,28,0.06);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;overflow:hidden;font-family:'Zen Maru Gothic',sans-serif;color:var(--ink);}
+  body{
+    background:
+      radial-gradient(circle, var(--paper-line) 1.4px, transparent 1.4px) 0 0/26px 26px,
+      var(--paper);
+  }
+
+  /* ---------- toolbar ---------- */
+  #toolbar{
+    position:fixed; top:0; left:0; right:0; z-index:30;
+    display:flex; align-items:center; gap:10px;
+    padding:10px 14px;
+    background:rgba(242,236,221,0.86);
+    backdrop-filter:blur(6px);
+    border-bottom:2px solid var(--ink);
+    flex-wrap:wrap;
+  }
+  #boardTitle{
+    font-family:'Yusei Magic',sans-serif;
+    font-size:18px; border:none; background:transparent; color:var(--ink);
+    width:200px; outline:none; border-bottom:2px dashed transparent;
+  }
+  #boardTitle:focus{border-bottom:2px dashed var(--ink-soft);}
+  .btn{
+    font-family:'Zen Maru Gothic',sans-serif; font-weight:700; font-size:13px;
+    border:2px solid var(--ink); background:var(--card); color:var(--ink);
+    border-radius:10px; padding:7px 12px; cursor:pointer;
+    display:flex; align-items:center; gap:6px;
+    box-shadow:2px 2px 0 var(--ink);
+    transition:transform .08s ease;
+  }
+  .btn:active{transform:translate(2px,2px); box-shadow:0 0 0 var(--ink);}
+  .btn.swatch::before{content:''; width:12px; height:12px; border-radius:50%; border:1.5px solid var(--ink); display:inline-block;}
+  .btn.idea::before{background:var(--idea);}
+  .btn.question::before{background:var(--question);}
+  .btn.action::before{background:var(--action);}
+  #spacer{flex:1;}
+  #status{font-size:12px; color:var(--ink-soft); min-width:86px;}
+  #zoomCtrls{display:flex; gap:4px; align-items:center;}
+  #zoomCtrls .btn{padding:6px 10px;}
+
+  /* ---------- canvas ---------- */
+  #canvasWrap{position:absolute; inset:0; top:58px; overflow:hidden; cursor:grab;}
+  #canvasWrap.panning{cursor:grabbing;}
+  #stage{position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform;}
+  svg#edgeLayer{position:absolute; left:0; top:0; width:1px; height:1px; overflow:visible; pointer-events:none;}
+  .edge-group{pointer-events:auto;}
+  .edge-path{fill:none; stroke:var(--ink); stroke-width:2.4; stroke-linecap:round; opacity:0.75;}
+  .edge-del{cursor:pointer; opacity:0; transition:opacity .12s;}
+  .edge-group:hover .edge-del{opacity:1;}
+  .edge-group:hover .edge-path{opacity:1; stroke-width:3;}
+
+  .node{
+    position:absolute; min-width:120px; max-width:220px;
+    padding:14px 16px 12px;
+    background:var(--card);
+    border:2.5px solid var(--ink);
+    border-radius:10px;
+    box-shadow:var(--shadow);
+    cursor:grab;
+    user-select:none;
+    font-family:'Yusei Magic',sans-serif;
+    font-size:15px; line-height:1.4;
+  }
+  .node:active{cursor:grabbing;}
+  .node.idea{background:var(--idea);}
+  .node.question{background:var(--question);}
+  .node.action{background:var(--action);}
+  .node.theme{background:var(--theme); font-size:19px; min-width:150px; border-width:3px; z-index:2;}
+  .node::before{
+    content:''; position:absolute; top:-9px; left:50%; transform:translateX(-50%) rotate(-3deg);
+    width:38px; height:16px; background:rgba(255,255,255,0.55); border:1px solid rgba(33,32,28,0.25);
+  }
+  .node-text{outline:none; word-break:break-word; white-space:pre-wrap;}
+  .node-text[contenteditable="true"]{background:rgba(255,255,255,0.5); border-radius:4px; padding:2px 4px;}
+  .node-del{
+    position:absolute; top:-11px; right:-11px; width:22px; height:22px; border-radius:50%;
+    background:var(--card); border:2px solid var(--ink); font-size:12px; line-height:18px; text-align:center;
+    cursor:pointer; opacity:0; transition:opacity .12s; font-family:'Zen Maru Gothic',sans-serif; font-weight:700;
+  }
+  .node:hover .node-del{opacity:1;}
+  .node-handle{
+    position:absolute; bottom:-9px; right:-9px; width:18px; height:18px; border-radius:50%;
+    background:var(--ink); border:2px solid var(--card); cursor:crosshair; opacity:0.25;
+  }
+  .node:hover .node-handle{opacity:1;}
+
+  #hint{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    color:var(--ink-soft); font-size:14px; text-align:center; pointer-events:none; max-width:280px;
+  }
+
+  /* ---------- modal ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(33,32,28,0.55); z-index:100;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .modal{
+    background:var(--card); border:3px solid var(--ink); border-radius:14px; box-shadow:var(--shadow);
+    padding:24px 26px; width:420px; max-width:92vw; max-height:86vh; overflow:auto;
+  }
+  .modal h2{font-family:'Yusei Magic',sans-serif; margin:0 0 6px; font-size:19px;}
+  .modal p{font-size:13px; color:var(--ink-soft); line-height:1.6;}
+  .modal label{display:block; font-size:12px; font-weight:700; margin:12px 0 4px;}
+  .modal input{
+    width:100%; padding:9px 10px; border:2px solid var(--ink); border-radius:8px; font-size:13px;
+    font-family:monospace; background:#fff;
+  }
+  .modal .actions{display:flex; gap:10px; margin-top:18px;}
+  .modal pre{
+    background:#EFE6C8; border:1.5px solid var(--paper-line); border-radius:8px; padding:10px; font-size:11px;
+    overflow:auto; white-space:pre-wrap;
+  }
+  .linklike{background:none;border:none;color:var(--ink-soft);text-decoration:underline;cursor:pointer;font-size:12px;padding:0;}
+
+  /* ---------- login / dashboard screens ---------- */
+  .screen{position:fixed; inset:0; display:flex; flex-direction:column;}
+  .hidden{display:none !important;}
+
+  #screenLogin{align-items:center; justify-content:center; text-align:center; gap:16px; padding:20px;}
+  #screenLogin h1{font-family:'Yusei Magic',sans-serif; font-size:26px; margin:0;}
+  #screenLogin p{color:var(--ink-soft); font-size:14px; max-width:340px; line-height:1.7;}
+  .google-btn{
+    display:flex; align-items:center; gap:10px; font-family:'Zen Maru Gothic',sans-serif; font-weight:700;
+    font-size:14px; padding:11px 20px; border-radius:10px; border:2.5px solid var(--ink); background:var(--card);
+    box-shadow:2px 2px 0 var(--ink); cursor:pointer;
+  }
+  .google-btn:active{transform:translate(2px,2px); box-shadow:0 0 0 var(--ink);}
+  .google-g{width:18px; height:18px;}
+
+  #screenDashboard{padding:26px 6vw;}
+  #dashHeader{display:flex; align-items:center; gap:12px; margin-bottom:22px; flex-wrap:wrap;}
+  #dashHeader h1{font-family:'Yusei Magic',sans-serif; font-size:22px; margin:0; flex:1;}
+  #userBadge{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-soft);}
+  #userBadge img{width:26px; height:26px; border-radius:50%; border:2px solid var(--ink);}
+  #boardList{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:16px; max-width:960px;}
+  .board-card{
+    background:var(--card); border:2.5px solid var(--ink); border-radius:12px; padding:16px;
+    box-shadow:var(--shadow); cursor:pointer; display:flex; flex-direction:column; gap:8px;
+  }
+  .board-card h3{margin:0; font-family:'Yusei Magic',sans-serif; font-size:16px;}
+  .board-card .meta{font-size:11px; color:var(--ink-soft);}
+  .board-card .card-actions{display:flex; justify-content:flex-end;}
+  .board-card .card-actions button{font-size:11px; padding:4px 8px;}
+  #dashEmpty{color:var(--ink-soft); font-size:14px; margin-top:20px;}
+  .code-display{
+    font-family:monospace; font-size:22px; text-align:center; letter-spacing:3px;
+    padding:14px; background:#EFE6C8; border-radius:8px; border:1.5px solid var(--paper-line); margin-top:10px;
+  }
+  .code-input{
+    letter-spacing:3px; font-size:18px; text-align:center;
+  }
+</style>
+</head>
+<body>
+
+<!-- ---------- login screen ---------- -->
+<div id="screenLogin" class="screen hidden">
+  <h1>ウェビングマップ</h1>
+  <p>Googleアカウントでログインすると、あなた専用のマップを保存・管理できます。他の人はあなたのマップを見ることはできません。</p>
+  <button class="google-btn" onclick="loginWithGoogle()">
+    <svg class="google-g" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.9 32.9 29.4 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.7-5.7C34.5 6 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l5.7-5.7C34.5 6 29.5 4 24 4c-7.7 0-14.3 4.4-17.7 10.7z"/><path fill="#4CAF50" d="M24 44c5.3 0 10.1-1.8 13.9-4.9l-6.4-5.4C29.4 35.6 26.8 36 24 36c-5.4 0-9.9-3.1-11.3-7.9l-6.6 5.1C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.7 2.1-2 3.9-3.8 5.2l6.4 5.4C41.4 36 44 30.5 44 24c0-1.3-.1-2.7-.4-3.5z"/></svg>
+    Googleでログイン
+  </button>
+  <button class="linklike" onclick="openSettings()">⚙️ Supabase接続設定</button>
+</div>
+
+<!-- ---------- dashboard screen ---------- -->
+<div id="screenDashboard" class="screen hidden">
+  <div id="dashHeader">
+    <h1>マイ・ウェビングマップ</h1>
+    <button class="btn" onclick="createBoard()">＋ 新しいマップ</button>
+    <button class="btn" onclick="openJoinModal()">🔑 コードで参加</button>
+    <span id="userBadge"></span>
+    <button class="btn" onclick="logout()">ログアウト</button>
+  </div>
+  <div id="boardList"></div>
+  <div id="dashEmpty" class="hidden">まだマップがありません。「＋ 新しいマップ」から作成しましょう。</div>
+</div>
+
+<!-- ---------- app screen ---------- -->
+<div id="screenApp" class="screen hidden">
+  <div id="toolbar">
+    <button class="btn" onclick="backToDashboard()">← 一覧</button>
+    <input id="boardTitle" value="無題のウェビングマップ" spellcheck="false">
+    <button class="btn idea" onclick="addNode('idea')">アイデア</button>
+    <button class="btn question" onclick="addNode('question')">問い</button>
+    <button class="btn action" onclick="addNode('action')">アクション</button>
+    <div id="spacer"></div>
+    <div id="zoomCtrls">
+      <button class="btn" onclick="zoomBy(-0.15)">－</button>
+      <button class="btn" onclick="resetView()">100%</button>
+      <button class="btn" onclick="zoomBy(0.15)">＋</button>
+    </div>
+    <button class="btn" onclick="shareLink()">🔗 リンクをコピー</button>
+    <button class="btn" onclick="openJoinCodeModal()">🔑 参加コード</button>
+    <span id="status">—</span>
+  </div>
+
+  <div id="canvasWrap">
+    <div id="stage">
+      <svg id="edgeLayer"></svg>
+      <div id="hint">画面を <b>ダブルクリック</b> するとメモを追加できます。<br>付箋の右下の丸をドラッグすると線でつなげます。</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* ================= state ================= */
+let nodes = [];
+let edges = [];
+let boardId = null;
+let sb = null;
+let sessionId = Math.random().toString(36).slice(2);
+let saveTimer = null;
+let channel = null;
+
+let view = {x:0, y:0, scale:1};
+let dragState = null;   // {type:'node'|'pan'|'connect', ...}
+let editingId = null;
+let currentUser = null;
+let currentBoardJoinCode = null;
+
+const canvasWrap = document.getElementById('canvasWrap');
+const stage = document.getElementById('stage');
+const svg = document.getElementById('edgeLayer');
+const statusEl = document.getElementById('status');
+const hint = document.getElementById('hint');
+
+/* ================= screens ================= */
+function showScreen(name){
+  ['screenLogin','screenDashboard','screenApp'].forEach(id => {
+    document.getElementById(id).classList.toggle('hidden', id !== name);
+  });
+  if(name === 'screenApp'){
+    requestAnimationFrame(() => resetView());
+  }
+}
+
+/* ================= config / supabase ================= */
+function getConfig(){
+  try{ return JSON.parse(localStorage.getItem('webmap_config_v1') || 'null'); }catch(e){ return null; }
+}
+function setConfig(cfg){ localStorage.setItem('webmap_config_v1', JSON.stringify(cfg)); }
+
+async function initSupabase(){
+  const cfg = getConfig();
+  if(!cfg || !cfg.url || !cfg.key){
+    openSettings(true);
+    return;
+  }
+  try{
+    sb = supabase.createClient(cfg.url, cfg.key);
+    sb.auth.onAuthStateChange((_event, session) => {
+      currentUser = session ? session.user : null;
+      handleAuthResolved();
+    });
+    const {data:{session}} = await sb.auth.getSession();
+    currentUser = session ? session.user : null;
+    handleAuthResolved();
+  }catch(e){
+    console.error(e);
+    setStatus('接続エラー', true);
+  }
+}
+
+function handleAuthResolved(){
+  if(!currentUser){
+    showScreen('screenLogin');
+    return;
+  }
+  const params = new URLSearchParams(location.search);
+  const id = params.get('board');
+  if(id){
+    boardId = id;
+    showScreen('screenApp');
+    loadBoard();
+    subscribeRealtime();
+  } else {
+    showScreen('screenDashboard');
+    renderUserBadge();
+    fetchBoards();
+  }
+}
+
+async function loginWithGoogle(){
+  await sb.auth.signInWithOAuth({
+    provider:'google',
+    options:{redirectTo: location.origin + location.pathname}
+  });
+}
+
+async function logout(){
+  if(channel){ sb.removeChannel(channel); channel = null; }
+  await sb.auth.signOut();
+  const params = new URLSearchParams(location.search);
+  params.delete('board');
+  history.replaceState(null, '', location.pathname);
+  showScreen('screenLogin');
+}
+
+function renderUserBadge(){
+  const badge = document.getElementById('userBadge');
+  const meta = currentUser.user_metadata || {};
+  badge.innerHTML = `${meta.avatar_url ? `<img src="${meta.avatar_url}">` : ''} ${meta.full_name || currentUser.email || ''}`;
+}
+
+/* ================= dashboard ================= */
+async function fetchBoards(){
+  const {data, error} = await sb.from('boards').select('id,title,updated_at,user_id,join_code').order('updated_at', {ascending:false});
+  const list = document.getElementById('boardList');
+  const empty = document.getElementById('dashEmpty');
+  list.innerHTML = '';
+  if(error){ console.error(error); empty.textContent = '読み込みに失敗しました'; empty.classList.remove('hidden'); return; }
+  if(!data || !data.length){ empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  data.forEach(b => {
+    const isOwner = b.user_id === currentUser.id;
+    const card = document.createElement('div');
+    card.className = 'board-card';
+    card.innerHTML = `
+      <h3>${escapeHtml(b.title || '無題のウェビングマップ')}</h3>
+      <div class="meta">${isOwner ? '作成者: あなた' : '参加中のマップ'}</div>
+      <div class="meta">更新: ${new Date(b.updated_at).toLocaleString('ja-JP')}</div>
+      ${isOwner ? `<div class="meta">参加コード: ${formatCode(b.join_code)}</div>` : ''}
+      <div class="card-actions">${isOwner ? '<button class="btn">削除</button>' : ''}</div>
+    `;
+    card.onclick = () => openBoard(b.id);
+    const delBtn = card.querySelector('.card-actions button');
+    if(delBtn){
+      delBtn.onclick = async (e) => {
+        e.stopPropagation();
+        if(!confirm('このマップを削除しますか？元に戻せません。')) return;
+        await sb.from('boards').delete().eq('id', b.id);
+        fetchBoards();
+      };
+    }
+    list.appendChild(card);
+  });
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function createBoard(){
+  const id = Math.random().toString(36).slice(2, 10);
+  const initial = {
+    nodes:[{id:uid(), type:'theme', x:0, y:0, text:'テーマを入力'}],
+    edges:[]
+  };
+  let code = genCode();
+  for(let attempt = 0; attempt < 5; attempt++){
+    const {error} = await sb.from('boards').insert({
+      id, title:'無題のウェビングマップ', data: initial, user_id: currentUser.id, join_code: code
+    });
+    if(!error){ openBoard(id); return; }
+    if(error.code === '23505' && attempt < 4){ code = genCode(); continue; }
+    console.error(error);
+    alert('作成に失敗しました');
+    return;
+  }
+}
+
+async function joinBoard(rawCode){
+  const code = rawCode.replace(/[^0-9]/g, '');
+  if(code.length !== 12){ alert('12桁の数字で入力してください'); return; }
+  const {data, error} = await sb.rpc('join_board', {p_code: code});
+  if(error || !data){
+    console.error(error);
+    alert('コードが見つかりませんでした。もう一度確認してください。');
+    return;
+  }
+  openBoard(data);
+}
+
+function openBoard(id){
+  const params = new URLSearchParams(location.search);
+  params.set('board', id);
+  history.pushState(null, '', location.pathname + '?' + params.toString());
+  boardId = id;
+  showScreen('screenApp');
+  loadBoard();
+  subscribeRealtime();
+}
+
+function backToDashboard(){
+  if(channel){ sb.removeChannel(channel); channel = null; }
+  const params = new URLSearchParams(location.search);
+  params.delete('board');
+  history.pushState(null, '', location.pathname);
+  boardId = null; nodes = []; edges = []; currentBoardJoinCode = null;
+  showScreen('screenDashboard');
+  renderUserBadge();
+  fetchBoards();
+}
+
+async function loadBoard(){
+  setStatus('読み込み中…');
+  let {data, error} = await sb.from('boards').select('*').eq('id', boardId).maybeSingle();
+  if(error){ console.error(error); setStatus('読み込み失敗', true); return; }
+  if(!data){
+    setStatus('このマップは見つかりません', true);
+    nodes = []; edges = [];
+    render();
+    return;
+  }
+  nodes = (data.data && data.data.nodes) || [];
+  edges = (data.data && data.data.edges) || [];
+  currentBoardJoinCode = data.join_code || null;
+  document.getElementById('boardTitle').value = data.title || document.getElementById('boardTitle').value;
+  render();
+  setStatus('保存済み');
+}
+
+function subscribeRealtime(){
+  channel = sb.channel('board-'+boardId)
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'boards', filter:`id=eq.${boardId}`}, payload => {
+      const incoming = payload.new;
+      if(incoming.data && incoming.data._by === sessionId) return; // ignore own echo
+      nodes = (incoming.data && incoming.data.nodes) || [];
+      edges = (incoming.data && incoming.data.edges) || [];
+      render();
+      setStatus('更新を受信しました');
+    })
+    .subscribe();
+}
+
+function scheduleSave(){
+  setStatus('保存中…');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => persist(false), 700);
+}
+
+async function persist(silent){
+  if(!sb || !boardId || !currentUser) return;
+  const title = document.getElementById('boardTitle').value;
+  const {error} = await sb.from('boards').upsert({
+    id: boardId,
+    title,
+    user_id: currentUser.id,
+    data: {nodes, edges, _by: sessionId},
+    updated_at: new Date().toISOString()
+  });
+  if(error){ console.error(error); setStatus('保存失敗（設定を確認）', true); return; }
+  if(!silent) setStatus('保存済み');
+}
+
+function setStatus(text, isError){
+  statusEl.textContent = text;
+  statusEl.style.color = isError ? '#a33' : '';
+}
+
+/* ================= helpers ================= */
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function genCode(){ let s=''; for(let i=0;i<12;i++) s += Math.floor(Math.random()*10); return s; }
+function formatCode(c){ return (c||'').replace(/(.{4})/g,'$1-').replace(/-$/,''); }
+
+function screenToWorld(sx, sy){
+  const rect = canvasWrap.getBoundingClientRect();
+  return {
+    x: (sx - rect.left - view.x) / view.scale,
+    y: (sy - rect.top - view.y) / view.scale
+  };
+}
+
+/* ================= render ================= */
+function render(){
+  hint.style.display = nodes.length ? 'none' : 'block';
+  stage.querySelectorAll('.node').forEach(n => n.remove());
+
+  nodes.forEach(n => {
+    const el = document.createElement('div');
+    el.className = 'node ' + n.type;
+    el.style.left = n.x + 'px';
+    el.style.top = n.y + 'px';
+    el.style.transform = `translate(-50%,-50%) rotate(${n.rot || 0}deg)`;
+    el.dataset.id = n.id;
+
+    const del = document.createElement('div');
+    del.className = 'node-del';
+    del.textContent = '×';
+    del.onpointerdown = e => { e.stopPropagation(); deleteNode(n.id); };
+    el.appendChild(del);
+
+    const txt = document.createElement('div');
+    txt.className = 'node-text';
+    txt.textContent = n.text || '';
+    txt.ondblclick = e => { e.stopPropagation(); startEdit(txt, n); };
+    el.appendChild(txt);
+
+    const handle = document.createElement('div');
+    handle.className = 'node-handle';
+    handle.onpointerdown = e => { e.stopPropagation(); startConnect(n, e); };
+    el.appendChild(handle);
+
+    el.onpointerdown = e => {
+      if(editingId === n.id) return;
+      startNodeDrag(n, e);
+    };
+
+    stage.appendChild(el);
+  });
+
+  renderEdges();
+}
+
+function renderEdges(){
+  svg.innerHTML = `
+    <filter id="wobble" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="1" seed="4" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="5"/>
+    </filter>`;
+  edges.forEach((e, i) => {
+    const a = nodes.find(n => n.id === e.from);
+    const b = nodes.find(n => n.id === e.to);
+    if(!a || !b) return;
+    const mx = (a.x + b.x)/2, my = (a.y + b.y)/2;
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class','edge-group');
+    g.innerHTML = `
+      <path class="edge-path" filter="url(#wobble)" d="M ${a.x} ${a.y} L ${b.x} ${b.y}"></path>
+      <circle class="edge-del" cx="${mx}" cy="${my}" r="9" fill="#FFFDF6" stroke="#21201C" stroke-width="2"></circle>
+      <text class="edge-del" x="${mx}" y="${my+4}" text-anchor="middle" font-size="12" font-weight="700" fill="#21201C" style="font-family:sans-serif;">×</text>
+    `;
+    g.querySelectorAll('.edge-del').forEach(el => el.onclick = () => { edges.splice(i,1); renderEdges(); scheduleSave(); });
+    svg.appendChild(g);
+  });
+}
+
+/* ================= node actions ================= */
+function addNode(type){
+  const rect = canvasWrap.getBoundingClientRect();
+  const center = screenToWorld(rect.left + rect.width/2, rect.top + rect.height/2);
+  const jitter = () => (Math.random()-0.5)*80;
+  const n = {
+    id: uid(), type,
+    x: center.x + jitter(), y: center.y + jitter(),
+    rot: Math.round((Math.random()*6)-3),
+    text: type==='idea' ? 'アイデア' : type==='question' ? '問い' : 'アクション'
+  };
+  nodes.push(n);
+  render();
+  scheduleSave();
+  const el = stage.querySelector(`.node[data-id="${n.id}"] .node-text`);
+  if(el) startEdit(el, n);
+}
+
+function deleteNode(id){
+  nodes = nodes.filter(n => n.id !== id);
+  edges = edges.filter(e => e.from !== id && e.to !== id);
+  render();
+  scheduleSave();
+}
+
+function startEdit(el, n){
+  editingId = n.id;
+  el.contentEditable = 'true';
+  el.focus();
+  document.execCommand('selectAll', false, null);
+  el.onblur = () => {
+    el.contentEditable = 'false';
+    n.text = el.textContent.trim() || n.text;
+    editingId = null;
+    scheduleSave();
+  };
+  el.onkeydown = ev => { if(ev.key === 'Enter'){ ev.preventDefault(); el.blur(); } };
+}
+
+/* ---- drag node ---- */
+function startNodeDrag(n, e){
+  e.preventDefault();
+  const startWorld = screenToWorld(e.clientX, e.clientY);
+  const offset = {x: n.x - startWorld.x, y: n.y - startWorld.y};
+  dragState = {type:'node', n, offset};
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragUp, {once:true});
+}
+
+/* ---- connect nodes ---- */
+let tempLine = null;
+function startConnect(n, e){
+  dragState = {type:'connect', from:n};
+  tempLine = document.createElementNS('http://www.w3.org/2000/svg','line');
+  tempLine.setAttribute('stroke', '#21201C');
+  tempLine.setAttribute('stroke-width','2');
+  tempLine.setAttribute('stroke-dasharray','5,4');
+  tempLine.setAttribute('x1', n.x); tempLine.setAttribute('y1', n.y);
+  tempLine.setAttribute('x2', n.x); tempLine.setAttribute('y2', n.y);
+  svg.appendChild(tempLine);
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragUp, {once:true});
+}
+
+function onDragMove(e){
+  if(!dragState) return;
+  const w = screenToWorld(e.clientX, e.clientY);
+  if(dragState.type === 'node'){
+    dragState.n.x = w.x + dragState.offset.x;
+    dragState.n.y = w.y + dragState.offset.y;
+    render();
+  } else if(dragState.type === 'connect'){
+    tempLine.setAttribute('x2', w.x);
+    tempLine.setAttribute('y2', w.y);
+  } else if(dragState.type === 'pan'){
+    view.x = dragState.startViewX + (e.clientX - dragState.startX);
+    view.y = dragState.startViewY + (e.clientY - dragState.startY);
+    applyView();
+  }
+}
+
+function onDragUp(e){
+  window.removeEventListener('pointermove', onDragMove);
+  if(dragState && dragState.type === 'connect'){
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    const nodeEl = target && target.closest('.node');
+    if(tempLine) tempLine.remove();
+    if(nodeEl){
+      const toId = nodeEl.dataset.id;
+      if(toId !== dragState.from.id && !edges.some(ed => (ed.from===dragState.from.id&&ed.to===toId)||(ed.from===toId&&ed.to===dragState.from.id))){
+        edges.push({from: dragState.from.id, to: toId});
+      }
+    }
+    renderEdges();
+    scheduleSave();
+  }
+  if(dragState && dragState.type === 'node'){ scheduleSave(); }
+  dragState = null;
+  canvasWrap.classList.remove('panning');
+}
+
+/* ---- pan & zoom ---- */
+canvasWrap.addEventListener('pointerdown', e => {
+  if(e.target !== canvasWrap && e.target !== stage && e.target.id !== 'hint') return;
+  dragState = {type:'pan', startX:e.clientX, startY:e.clientY, startViewX:view.x, startViewY:view.y};
+  canvasWrap.classList.add('panning');
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragUp, {once:true});
+});
+
+canvasWrap.addEventListener('dblclick', e => {
+  if(e.target !== canvasWrap && e.target !== stage && e.target.id !== 'hint') return;
+  const w = screenToWorld(e.clientX, e.clientY);
+  const n = {id:uid(), type:'idea', x:w.x, y:w.y, rot:Math.round((Math.random()*6)-3), text:'メモ'};
+  nodes.push(n);
+  render();
+  scheduleSave();
+  const el = stage.querySelector(`.node[data-id="${n.id}"] .node-text`);
+  if(el) startEdit(el, n);
+});
+
+canvasWrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  const delta = -e.deltaY * 0.0012;
+  zoomBy(delta, e.clientX, e.clientY);
+}, {passive:false});
+
+function zoomBy(delta, cx, cy){
+  const rect = canvasWrap.getBoundingClientRect();
+  cx = cx ?? rect.left + rect.width/2;
+  cy = cy ?? rect.top + rect.height/2;
+  const before = screenToWorld(cx, cy);
+  view.scale = Math.min(2.5, Math.max(0.3, view.scale + delta));
+  const after = screenToWorld(cx, cy);
+  view.x += (after.x - before.x) * view.scale;
+  view.y += (after.y - before.y) * view.scale;
+  applyView();
+}
+function resetView(){ view = {x: canvasWrap.clientWidth/2, y: canvasWrap.clientHeight/2, scale:1}; applyView(); }
+function applyView(){ stage.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`; }
+
+/* ================= title / share ================= */
+document.getElementById('boardTitle').addEventListener('input', scheduleSave);
+function shareLink(){
+  navigator.clipboard.writeText(location.href).then(() => {
+    setStatus('リンクをコピーしました');
+  }).catch(() => setStatus('コピーに失敗しました', true));
+}
+
+/* ================= join by code ================= */
+function openJoinModal(){
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-backdrop';
+  wrap.innerHTML = `
+    <div class="modal">
+      <h2>コードで参加</h2>
+      <p>共同編集したい相手から共有された12桁の参加コードを入力してください。</p>
+      <label>参加コード</label>
+      <input id="joinCodeInput" class="code-input" placeholder="1234-5678-9012">
+      <div class="actions">
+        <button class="btn" id="joinGo">参加する</button>
+        <button class="btn" id="joinClose">閉じる</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  document.getElementById('joinClose').onclick = () => wrap.remove();
+  document.getElementById('joinGo').onclick = async () => {
+    const val = document.getElementById('joinCodeInput').value;
+    await joinBoard(val);
+    wrap.remove();
+  };
+}
+
+function openJoinCodeModal(){
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-backdrop';
+  wrap.innerHTML = `
+    <div class="modal">
+      <h2>このマップの参加コード</h2>
+      <p>このコードを共有すると、相手はGoogleでログインしたうえで「🔑 コードで参加」からこのマップに参加し、一緒に編集できるようになります。</p>
+      <div class="code-display">${formatCode(currentBoardJoinCode)}</div>
+      <div class="actions">
+        <button class="btn" id="codeCopy">コードをコピー</button>
+        <button class="btn" id="codeClose">閉じる</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  document.getElementById('codeClose').onclick = () => wrap.remove();
+  document.getElementById('codeCopy').onclick = () => {
+    navigator.clipboard.writeText(currentBoardJoinCode || '').then(() => setStatus('コードをコピーしました'));
+  };
+}
+
+/* ================= settings modal ================= */
+function openSettings(forceFirstRun){
+  const cfg = getConfig() || {url:'', key:''};
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-backdrop';
+  wrap.innerHTML = `
+    <div class="modal">
+      <h2>Supabase 接続設定</h2>
+      <p>あなた自身の Supabase プロジェクトの URL と anon key を入力してください。Googleログインを使うため、Supabase側で Auth &gt; Providers &gt; Google を有効にし、下のSQLでテーブルを作成しておく必要があります。詳細は同梱の README.md を参照してください。</p>
+      <label>Project URL</label>
+      <input id="cfgUrl" placeholder="https://xxxx.supabase.co" value="${cfg.url || ''}">
+      <label>anon public key</label>
+      <input id="cfgKey" placeholder="eyJhbGciOi..." value="${cfg.key || ''}">
+      <div class="actions">
+        <button class="btn" id="cfgSave">保存して接続</button>
+        ${forceFirstRun ? '' : '<button class="btn" id="cfgClose">閉じる</button>'}
+      </div>
+      <p style="margin-top:14px;">テーブル作成用SQL（Supabase の SQL Editor で実行）:</p>
+      <pre>create table boards (
+  id text primary key,
+  title text,
+  data jsonb not null default '{}'::jsonb,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  join_code text unique not null,
+  collaborators uuid[] not null default '{}',
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+alter table boards enable row level security;
+create policy "member select" on boards for select
+  using (auth.uid() = user_id or auth.uid() = any(collaborators));
+create policy "owner insert" on boards for insert
+  with check (auth.uid() = user_id);
+create policy "member update" on boards for update
+  using (auth.uid() = user_id or auth.uid() = any(collaborators));
+create policy "owner delete" on boards for delete
+  using (auth.uid() = user_id);
+alter publication supabase_realtime add table boards;
+
+create or replace function join_board(p_code text)
+returns text language plpgsql security definer set search_path = public as $$
+declare b_id text;
+begin
+  select id into b_id from boards where join_code = p_code;
+  if b_id is null then raise exception 'invalid_code'; end if;
+  update boards set collaborators = array_append(collaborators, auth.uid())
+    where id = b_id and auth.uid() <> user_id and not (auth.uid() = any(collaborators));
+  return b_id;
+end; $$;
+grant execute on function join_board(text) to authenticated;</pre>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  document.getElementById('cfgSave').onclick = async () => {
+    const url = document.getElementById('cfgUrl').value.trim();
+    const key = document.getElementById('cfgKey').value.trim();
+    if(!url || !key){ alert('URL と key の両方を入力してください'); return; }
+    setConfig({url, key});
+    wrap.remove();
+    await initSupabase();
+  };
+  const closeBtn = document.getElementById('cfgClose');
+  if(closeBtn) closeBtn.onclick = () => wrap.remove();
+}
+
+/* ================= boot ================= */
+initSupabase();
+</script>
+</body>
+</html>
