@@ -73,6 +73,10 @@ header{padding:10px 14px;border-bottom:0.5px solid var(--border);display:flex;al
 .htools{display:flex;gap:4px;align-items:center;flex-wrap:wrap;}
 .hsep{width:0.5px;height:18px;background:var(--border);margin:0 2px;}
 
+/* TOOLBAR */
+#fmt-toolbar{display:flex!important;}
+#fmt-toolbar.visible{display:flex!important;}
+
 /* CANVAS */
 #viewport{flex:1;position:relative;overflow:hidden;cursor:grab;background:var(--bg);}
 #viewport.panning{cursor:grabbing;}
@@ -85,6 +89,10 @@ header{padding:10px 14px;border-bottom:0.5px solid var(--border);display:flex;al
 .edge-line{stroke:var(--border-stronger);stroke-width:2px;fill:none;pointer-events:none;transition:stroke 0.1s;}
 .edge-line.selected{stroke:var(--danger);stroke-width:2.5px;stroke-dasharray:5 3;}
 .edge-draft{stroke:var(--accent);stroke-width:2px;stroke-dasharray:6 4;fill:none;pointer-events:none;}
+
+.fmt-btn{width:28px;height:28px;border-radius:5px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;}
+.fmt-btn:hover{background:var(--surface);color:var(--text);}
+.fmt-btn.active{background:var(--surface);color:var(--text);}
 
 .wm-node{position:absolute;min-width:150px;max-width:260px;padding:12px 14px 11px;border-radius:14px;
   box-shadow:0 2px 8px rgba(0,0,0,0.08),0 1px 2px rgba(0,0,0,0.04);border:1.5px solid rgba(0,0,0,0.07);
@@ -116,6 +124,68 @@ header{padding:10px 14px;border-bottom:0.5px solid var(--border);display:flex;al
 </head>
 <body>
 
+<!-- リッチテキストツールバー -->
+<div id="fmt-toolbar" style="display:none;position:fixed;z-index:50;background:var(--bg);border:0.5px solid var(--border-strong);border-radius:8px;padding:4px 6px;gap:2px;align-items:center;box-shadow:0 2px 12px rgba(0,0,0,0.1);">
+  <button class="fmt-btn" id="fmt-bold" onclick="execFmt('bold')" title="太字 (Ctrl+B)"><b>B</b></button>
+  <div style="width:0.5px;height:18px;background:var(--border-strong);margin:0 3px;"></div>
+  <div style="position:relative;">
+    <button class="fmt-btn" id="fmt-text-btn" onclick="toggleColorPicker('fmt-text-color')" title="文字色"><span style="font-size:13px;font-weight:700;color:var(--text);">A</span><span style="font-size:8px;color:var(--accent);">▼</span></button>
+    <div id="fmt-text-color" style="display:none;position:absolute;top:34px;left:50%;transform:translateX(-50%);background:var(--bg);border:0.5px solid var(--border-strong);border-radius:8px;padding:8px;gap:6px;flex-wrap:wrap;width:140px;z-index:60;box-shadow:0 2px 12px rgba(0,0,0,0.12);"></div>
+  </div>
+  <div style="position:relative;">
+    <button class="fmt-btn" id="fmt-bg-btn" onclick="toggleColorPicker('fmt-bg-color')" title="ノード背景色"><span style="font-size:13px;">🎨</span></button>
+    <div id="fmt-bg-color" style="display:none;position:absolute;top:34px;left:50%;transform:translateX(-50%);background:var(--bg);border:0.5px solid var(--border-strong);border-radius:8px;padding:8px;gap:6px;flex-wrap:wrap;width:140px;z-index:60;box-shadow:0 2px 12px rgba(0,0,0,0.12);"></div>
+  </div>
+  <div style="position:relative;">
+    <button class="fmt-btn" id="fmt-border-btn" onclick="toggleColorPicker('fmt-border-color')" title="枠線色"><span style="font-size:13px;">⬚</span></button>
+    <div id="fmt-border-color" style="display:none;position:absolute;top:34px;left:50%;transform:translateX(-50%);background:var(--bg);border:0.5px solid var(--border-strong);border-radius:8px;padding:8px;gap:6px;flex-wrap:wrap;width:140px;z-index:60;box-shadow:0 2px 12px rgba(0,0,0,0.12);"></div>
+  </div>
+</div>
+
+<!-- 共有ルームモーダル -->
+<div id="room-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:var(--bg);border-radius:12px;padding:24px;width:340px;border:0.5px solid var(--border);position:relative;max-height:90vh;overflow-y:auto;">
+    <button onclick="closeRoomModal()" style="position:absolute;top:12px;right:12px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;font-size:16px;">✕</button>
+    <div style="font-size:15px;font-weight:600;margin-bottom:4px;">🕸️ 共有ルーム</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;">複数人でライブ編集</div>
+    
+    <!-- 参加・作成ビュー -->
+    <div id="room-view-join">
+      <div style="margin-bottom:16px;">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">新しいルームを作成</div>
+        <input id="room-name-input" placeholder="ルーム名（例：企画会議）" maxlength="30" style="width:100%;padding:8px 10px;border-radius:6px;border:0.5px solid var(--border-strong);background:var(--bg);color:var(--text);font-size:14px;outline:none;margin-bottom:8px;">
+        <button onclick="createRoom()" style="width:100%;padding:9px;border-radius:6px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:500;">＋ 作成してすぐ入る</button>
+      </div>
+      <div style="border-top:0.5px solid var(--border);padding-top:16px;margin-bottom:16px;">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">コードで参加</div>
+        <div style="display:flex;gap:6px;">
+          <input id="room-code-input" placeholder="12桁のコード" maxlength="12" style="flex:1;padding:8px 10px;border-radius:6px;border:0.5px solid var(--border-strong);background:var(--bg);color:var(--text);font-size:14px;font-family:monospace;letter-spacing:0.1em;outline:none;">
+          <button onclick="joinRoom()" style="padding:8px 14px;border-radius:6px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;">参加</button>
+        </div>
+      </div>
+      <div id="recent-rooms-section" style="display:none;">
+        <div style="border-top:0.5px solid var(--border);padding-top:16px;">
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">最近のルーム</div>
+          <div id="recent-rooms-list"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 参加中ビュー -->
+    <div id="room-view-active" style="display:none;">
+      <div id="room-title-display" style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:12px;"></div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">ルームコード</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;">
+        <div id="room-code-display" style="flex:1;font-size:18px;font-weight:700;font-family:monospace;letter-spacing:0.15em;color:var(--text);background:var(--surface);padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);"></div>
+        <button onclick="copyRoomCode()" style="padding:8px 12px;border-radius:6px;border:0.5px solid var(--border-strong);background:transparent;color:var(--text-secondary);cursor:pointer;font-size:12px;" id="copy-btn">コピー</button>
+      </div>
+      <button onclick="closeRoomModal()" style="width:100%;padding:8px;border-radius:6px;border:0.5px solid var(--border-strong);background:transparent;color:var(--text);cursor:pointer;font-size:13px;margin-bottom:8px;">編集画面へ戻る</button>
+      <button onclick="leaveRoom()" style="width:100%;padding:8px;border-radius:6px;border:0.5px solid var(--danger);background:transparent;color:var(--danger);cursor:pointer;font-size:13px;margin-bottom:8px;">ルームを退出</button>
+      <button onclick="deleteRoom()" style="width:100%;padding:8px;border-radius:6px;border:none;background:var(--danger);color:#fff;cursor:pointer;font-size:13px;">🗑 ルームを削除</button>
+    </div>
+  </div>
+</div>
+
 <!-- ログイン画面 -->
 <div id="login-screen">
   <div class="login-card">
@@ -144,6 +214,7 @@ header{padding:10px 14px;border-bottom:0.5px solid var(--border);display:flex;al
   <div class="sidebar-footer">
     <div class="sync-status" id="sync-status"></div>
     <button class="new-map-btn" onclick="newMap(null,true)">＋ 新しいマップ</button>
+    <button class="new-map-btn" onclick="openRoomModal()" style="border-color:var(--accent);color:var(--accent);">🕸️ 共有ルーム</button>
     <button class="logout-btn" onclick="logout()">ログアウト</button>
   </div>
 </div>
@@ -152,6 +223,11 @@ header{padding:10px 14px;border-bottom:0.5px solid var(--border);display:flex;al
   <header>
     <button id="sidebar-toggle" onclick="toggleSidebar()" aria-label="サイドバー">☰</button>
     <input id="map-title-input" oninput="onTitleInput()" placeholder="無題のマップ">
+    <span id="room-indicator" style="display:none;align-items:center;gap:5px;flex-shrink:0;background:var(--accent-soft);border-radius:20px;padding:3px 10px 3px 6px;border:0.5px solid var(--accent);">
+      <span style="font-size:13px;">🕸️</span>
+      <span id="room-indicator-name" style="font-size:12px;color:var(--accent);font-weight:500;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+      <span style="font-size:12px;">👥</span>
+    </span>
     <div class="htools">
       <button class="hbtn" id="undo-btn" onclick="undo()" title="元に戻す (Ctrl+Z)" disabled>↩</button>
       <button class="hbtn" id="redo-btn" onclick="redo()" title="やり直す (Ctrl+Y)" disabled>↪</button>
@@ -173,6 +249,10 @@ header{padding:10px 14px;border-bottom:0.5px solid var(--border);display:flex;al
     </div>
     <div id="empty-hint">ダブルクリックでアイデアを追加できます</div>
   </div>
+  <!-- 共有ルーム中のFAB -->
+  <button id="leave-room-fab" onclick="leaveRoom()" style="display:none;position:fixed;bottom:24px;left:240px;z-index:30;padding:10px 16px;border-radius:24px;border:none;background:#241f19;color:#fff;cursor:pointer;font-size:13px;gap:6px;align-items:center;box-shadow:0 2px 12px rgba(0,0,0,0.18);">
+    🏠 自分のメモに戻る
+  </button>
 </div>
 
 <script>
@@ -250,7 +330,7 @@ function updateUndoButtons(){
 function newMap(title,switchTo){
   const id=muid();
   const rootId=nuid();
-  const rootNode={id:rootId,x:Math.round(WORLD_W/2-80),y:Math.round(WORLD_H/2-24),text:'メインテーマ',color:PALETTE[0],starter:true};
+  const rootNode={id:rootId,x:Math.round(WORLD_W/2-80),y:Math.round(WORLD_H/2-24),text:'メインテーマ',html:'メインテーマ',color:PALETTE[0],starter:true};
   const map={id,title:title||'', nodes:[rootNode], edges:[], nextNodeId:nuid(), nextEdgeId:euid()};
   maps.push(map);
   if(switchTo!==false){
@@ -268,13 +348,18 @@ function switchMap(id){
 }
 
 function saveCurrent(){
-  const map=getCurrentMap(); if(!map) return;
-  map.nodes=nodes; map.edges=edges; map.nextNodeId=nextNodeId; map.nextEdgeId=nextEdgeId;
-  const input=document.getElementById('map-title-input');
-  if(input) map.title=input.value;
-  saveLocal();
-  clearTimeout(window.__syncTimer);
-  window.__syncTimer=setTimeout(syncToCloud,1500);
+  if(currentRoomCode){
+    clearTimeout(window.__syncTimer);
+    window.__syncTimer=setTimeout(syncRoomData,1500);
+  }else{
+    const map=getCurrentMap(); if(!map) return;
+    map.nodes=nodes; map.edges=edges; map.nextNodeId=nextNodeId; map.nextEdgeId=nextEdgeId;
+    const input=document.getElementById('map-title-input');
+    if(input) map.title=input.value;
+    saveLocal();
+    clearTimeout(window.__syncTimer);
+    window.__syncTimer=setTimeout(syncToCloud,1500);
+  }
 }
 
 function onTitleInput(){
@@ -308,6 +393,9 @@ function renderSidebar(){
 }
 
 function renderMap(){
+  if(currentRoomCode){
+    loadRoomData(); return;
+  }
   const map=getCurrentMap();
   if(!map){ nodes=[]; edges=[]; return; }
   nodes=map.nodes; edges=map.edges; nextNodeId=map.nextNodeId; nextEdgeId=map.nextEdgeId;
@@ -338,6 +426,7 @@ function buildNodeEl(n){
   div.className='wm-node'+(n.starter?' starter':'');
   div.id='n'+n.id;
   div.style.left=n.x+'px'; div.style.top=n.y+'px'; div.style.background=n.color||PALETTE[0];
+  if(n.borderColor){ div.style.borderColor=n.borderColor; div.style.borderWidth='2px'; }
   div.onmousedown=(e)=>startDragNode(e,n.id);
   div.innerHTML=`
     <div class="wm-node-tools">
@@ -348,7 +437,7 @@ function buildNodeEl(n){
       ondblclick="enterEdit(this,${n.id});event.stopPropagation()"
       onblur="commitEdit(this,${n.id})"
       onmousedown="if(this.getAttribute('contenteditable')==='true')event.stopPropagation()"
-      onkeydown="if(event.key==='Escape'){this.blur();}">${esc(n.text)}</div>
+      onkeydown="if(event.key==='Escape'){this.blur();}">${n.html||esc(n.text)}</div>
     <div class="wm-handle" title="ドラッグして線をつなぐ" onmousedown="startConnect(event,${n.id})"></div>
   `;
   return div;
@@ -410,6 +499,7 @@ function commitEdit(el,id){
   el.setAttribute('contenteditable','false');
   const n=getNode(id); if(!n) return;
   n.text=el.innerText.replace(/\u00a0/g,' ');
+  n.html=el.innerHTML; // リッチテキスト（色文字など）を保存
   saveCurrent();
 }
 function cycleColor(id){
@@ -430,7 +520,7 @@ function deleteNode(id){
 function addNodeAt(worldX,worldY){
   snapshot();
   const id=nuid();
-  nodes.push({id,x:Math.round(worldX-80),y:Math.round(worldY-24),text:'',color:PALETTE[0]});
+  nodes.push({id,x:Math.round(worldX-80),y:Math.round(worldY-24),text:'',html:'',color:PALETTE[0]});
   renderCanvas(); saveCurrent();
   setTimeout(()=>enterEdit(document.getElementById('t'+id),id),50);
 }
@@ -607,6 +697,327 @@ function fitToView(){
   applyTransform();
 }
 
+/* ── リッチテキストツールバー ── */
+let selectedNodeId=null;
+let savedSelection=null;
+const TEXT_COLORS=['#241f19','#E24B4A','#FF5A36','#6366f1','#7EC845','#8b5cf6','#a89e8e'];
+const BG_COLORS=['#ffffff','#FEF9C3','#DCFCE7','#DBEAFE','#FCE7F3','#FFEDD5','#F3E8FF'];
+const BORDER_COLORS=['#ffffff','#E24B4A','#FF5A36','#6366f1','#7EC845','#8b5cf6','#a89e8e'];
+
+function saveSelection(){
+  const sel=window.getSelection();
+  if(sel.rangeCount>0){ savedSelection=sel.getRangeAt(0); }
+}
+function restoreSelection(){
+  if(!savedSelection) return;
+  const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(savedSelection);
+}
+
+function showToolbar(nodeId){
+  selectedNodeId=nodeId;
+  const el=document.getElementById('fmt-toolbar');
+  el.classList.add('visible');
+  const rect=document.getElementById('n'+nodeId).getBoundingClientRect();
+  const tw=el.offsetWidth||160, th=el.offsetHeight||40;
+  const left=rect.left+rect.width/2-tw/2;
+  const top=rect.top-th-8;
+  el.style.left=Math.max(8,Math.min(left,window.innerWidth-tw-8))+'px';
+  el.style.top=Math.max(8,top)+'px';
+  updateToolbarState(nodeId);
+}
+
+function hideToolbar(){
+  selectedNodeId=null;
+  const tb=document.getElementById('fmt-toolbar');
+  tb.classList.remove('visible');
+  document.getElementById('fmt-text-color').style.display='none';
+  document.getElementById('fmt-bg-color').style.display='none';
+  document.getElementById('fmt-border-color').style.display='none';
+}
+
+function updateToolbarState(nodeId){
+  const el=document.getElementById('t'+nodeId);
+  if(!el) return;
+  const bold=document.queryCommandState('bold');
+  document.getElementById('fmt-bold').classList.toggle('active',bold);
+}
+
+function execFmt(cmd){
+  restoreSelection();
+  document.execCommand(cmd,false,null);
+  updateToolbarState(selectedNodeId);
+  saveCurrent();
+}
+
+function toggleColorPicker(picker){
+  saveSelection();
+  document.getElementById('fmt-text-color').style.display='none';
+  document.getElementById('fmt-bg-color').style.display='none';
+  document.getElementById('fmt-border-color').style.display='none';
+  const el=document.getElementById(picker);
+  el.style.display=el.style.display==='flex'?'none':'flex';
+}
+
+function setNodeTextColor(color){
+  restoreSelection();
+  document.execCommand('styleWithCSS',false,true);
+  document.execCommand('foreColor',false,color);
+  document.getElementById('fmt-text-color').classList.remove('visible');
+  saveCurrent();
+}
+
+function setNodeBgColor(color){
+  if(!selectedNodeId) return;
+  snapshot();
+  const n=getNode(selectedNodeId);
+  if(!n) return;
+  n.color=color;
+  document.getElementById('n'+selectedNodeId).style.background=color;
+  document.getElementById('fmt-bg-color').classList.remove('visible');
+  saveCurrent();
+}
+
+function setNodeBorderColor(color){
+  if(!selectedNodeId) return;
+  snapshot();
+  const n=getNode(selectedNodeId);
+  if(!n) return;
+  n.borderColor=color;
+  const el=document.getElementById('n'+selectedNodeId);
+  el.style.borderColor=color;
+  el.style.borderWidth='2px';
+  document.getElementById('fmt-border-color').classList.remove('visible');
+  saveCurrent();
+}
+
+document.addEventListener('selectionchange',()=>{
+  const sel=window.getSelection();
+  if(!sel||sel.isCollapsed||sel.toString().trim()===''){
+    hideToolbar(); return;
+  }
+  const el=sel.getRangeAt(0).startContainer.parentElement;
+  if(!el||!el.closest('.wm-node-body')){ hideToolbar(); return; }
+  saveSelection();
+  const nodeEl=el.closest('.wm-node');
+  if(nodeEl){
+    const nodeId=parseInt(nodeEl.id.slice(1),10);
+    showToolbar(nodeId);
+  }
+});
+
+document.addEventListener('mousedown',(e)=>{
+  const tb=document.getElementById('fmt-toolbar');
+  if(tb.contains(e.target)){ e.preventDefault(); return; }
+  hideToolbar();
+});
+
+document.addEventListener('keydown',(e)=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==='b'){
+    const sel=window.getSelection();
+    if(sel&&!sel.isCollapsed){
+      const el=sel.getRangeAt(0).startContainer.parentElement;
+      if(el?.closest('.wm-node-body')){ e.preventDefault(); execFmt('bold'); }
+    }
+  }
+});
+
+/* ── 共有ルーム ── */
+let currentRoomCode=null, currentRoomTitle=null;
+let roomSubscription=null;
+let roomMembers=[];
+
+function generateRoomCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({length:12},()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+}
+
+async function createRoom(){
+  const name=document.getElementById('room-name-input').value.trim();
+  if(!name){ alert('ルーム名を入力してください'); return; }
+  if(!currentUser) return;
+  const code=generateRoomCode();
+  try{
+    const {error}=await sb.from('webmap_rooms').insert({
+      code, owner_id:currentUser.id, room_name:name, created_at:new Date().toISOString()
+    });
+    if(error) throw error;
+    saveRecentRoom(code,name);
+    await joinRoom(code,name);
+    document.getElementById('room-name-input').value='';
+  }catch(e){ alert('作成に失敗しました'); console.error(e); }
+}
+
+async function joinRoom(codeOrEv,nameOverride){
+  const code=typeof codeOrEv==='string'?codeOrEv:(document.getElementById('room-code-input').value.trim()||'');
+  if(!code){ alert('コードを入力してください'); return; }
+  if(!currentUser) return;
+  try{
+    const {data,error}=await sb.from('webmap_rooms').select('*').eq('code',code).single();
+    if(error||!data){ alert('見つかりません'); return; }
+    currentRoomCode=code; currentRoomTitle=nameOverride||data.room_name;
+    saveRecentRoom(code,currentRoomTitle);
+    document.getElementById('room-code-input').value='';
+    showRoomActive();
+    updateRoomUI();
+    watchRoom();
+  }catch(e){ alert('参加に失敗しました'); console.error(e); }
+}
+
+function showRoomActive(){
+  document.getElementById('room-view-join').style.display='none';
+  document.getElementById('room-view-active').style.display='block';
+  document.getElementById('room-code-display').textContent=currentRoomCode;
+  document.getElementById('room-title-display').textContent=currentRoomTitle||'共有ルーム';
+}
+
+function openRoomModal(){
+  document.getElementById('room-modal').style.display='flex';
+  if(currentRoomCode){ showRoomActive(); }
+  else{
+    document.getElementById('room-view-join').style.display='block';
+    document.getElementById('room-view-active').style.display='none';
+    renderRecentRooms();
+  }
+}
+
+function closeRoomModal(){
+  document.getElementById('room-modal').style.display='none';
+}
+
+function leaveRoom(){
+  if(!currentRoomCode){ alert('ルームに参加していません'); return; }
+  if(roomSubscription){ roomSubscription.unsubscribe(); roomSubscription=null; }
+  currentRoomCode=null; currentRoomTitle=null; setSyncStatus('');
+  updateRoomUI(); closeRoomModal();
+  renderMap(); centerView();
+}
+
+async function deleteRoom(){
+  if(!currentRoomCode) return;
+  if(!confirm(`「${currentRoomTitle||'共有ルーム'}」を完全に削除しますか？`)) return;
+  const code=currentRoomCode;
+  if(roomSubscription){ roomSubscription.unsubscribe(); roomSubscription=null; }
+  currentRoomCode=null; currentRoomTitle=null; setSyncStatus('');
+  closeRoomModal(); updateRoomUI();
+  try{
+    await sb.from('webmap_room_data').delete().eq('room_code',code);
+    await sb.from('webmap_rooms').delete().eq('code',code);
+    removeRecentRoom(code);
+  }catch(e){ console.error(e); alert('削除に失敗しました'); }
+  renderMap(); centerView();
+}
+
+function copyRoomCode(){
+  navigator.clipboard.writeText(currentRoomCode).then(()=>{
+    const btn=document.getElementById('copy-btn');
+    const orig=btn.textContent; btn.textContent='✓ コピー済み';
+    setTimeout(()=>{btn.textContent=orig;},1500);
+  });
+}
+
+function getRecentRooms(){
+  try{ return JSON.parse(localStorage.getItem('viralmemo-recent-rooms')||'[]'); }catch(e){ return []; }
+}
+
+function saveRecentRoom(code,title){
+  let rooms=getRecentRooms().filter(r=>r.code!==code);
+  rooms.unshift({code,title,at:Date.now()});
+  rooms=rooms.slice(0,5);
+  localStorage.setItem('viralmemo-recent-rooms',JSON.stringify(rooms));
+}
+
+function removeRecentRoom(code){
+  const rooms=getRecentRooms().filter(r=>r.code!==code);
+  localStorage.setItem('viralmemo-recent-rooms',JSON.stringify(rooms));
+  renderRecentRooms();
+}
+
+function renderRecentRooms(){
+  const rooms=getRecentRooms();
+  const sec=document.getElementById('recent-rooms-section');
+  const list=document.getElementById('recent-rooms-list');
+  if(!rooms.length){ sec.style.display='none'; return; }
+  sec.style.display='block';
+  list.innerHTML=rooms.map(r=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:0.5px solid var(--border);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.title||'共有ルーム')}</div>
+        <div style="font-size:11px;color:var(--text-muted);font-family:monospace;letter-spacing:0.05em;">${r.code}</div>
+      </div>
+      <button onclick="quickJoinRoom('${r.code}')" style="padding:5px 10px;border-radius:6px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:12px;flex-shrink:0;">入る</button>
+      <button onclick="removeRecentRoom('${r.code}')" style="padding:5px 7px;border-radius:6px;border:0.5px solid var(--danger);background:transparent;color:var(--danger);cursor:pointer;font-size:11px;flex-shrink:0;">✕</button>
+    </div>`).join('');
+}
+
+function quickJoinRoom(code){
+  document.getElementById('room-code-input').value=code;
+  joinRoom();
+}
+
+function updateRoomUI(){
+  const indicator=document.getElementById('room-indicator');
+  const fab=document.getElementById('leave-room-fab');
+  const titleInput=document.getElementById('map-title-input');
+  if(currentRoomCode){
+    indicator.style.display='flex';
+    document.getElementById('room-indicator-name').textContent=currentRoomTitle||'共有ルーム';
+    fab.style.display='flex';
+    titleInput.disabled=true;
+  }else{
+    indicator.style.display='none';
+    fab.style.display='none';
+    if(titleInput) titleInput.disabled=false;
+  }
+}
+
+async function watchRoom(){
+  if(!currentRoomCode) return;
+  if(roomSubscription){ roomSubscription.unsubscribe(); }
+  roomSubscription=sb.channel(`webmap-room:${currentRoomCode}`)
+    .on('postgres_changes',{
+      event:'*',
+      schema:'public',
+      table:'webmap_room_data',
+      filter:`room_code=eq.${currentRoomCode}`
+    },(payload)=>{
+      if(payload.eventType==='INSERT'||payload.eventType==='UPDATE'){
+        loadRoomData();
+      }else if(payload.eventType==='DELETE'){
+        loadRoomData();
+      }
+    }).subscribe();
+  loadRoomData();
+}
+
+async function loadRoomData(){
+  if(!currentRoomCode) return;
+  try{
+    const {data,error}=await sb.from('webmap_room_data')
+      .select('*')
+      .eq('room_code',currentRoomCode)
+      .single();
+    if(error){
+      if(error.code!=='PGRST116') console.error(error);
+      nodes=[]; edges=[]; nextNodeId=100; nextEdgeId=100;
+    }else if(data){
+      nodes=data.nodes||[]; edges=data.edges||[];
+      nextNodeId=data.next_node_id||100; nextEdgeId=data.next_edge_id||100;
+    }
+    renderCanvas();
+    setSyncStatus('✓ 共有中');
+  }catch(e){ console.error(e); }
+}
+
+async function syncRoomData(){
+  if(!currentRoomCode||!currentUser) return;
+  try{
+    const {error}=await sb.from('webmap_room_data').upsert({
+      room_code:currentRoomCode, nodes, edges, next_node_id:nextNodeId, next_edge_id:nextEdgeId, updated_at:new Date().toISOString()
+    },{onConflict:'room_code'});
+    if(error) throw error;
+  }catch(e){ console.error('ルーム同期エラー',e); }
+}
+
 /* ── サイドバー開閉 ── */
 function toggleSidebar(){
   sidebarVisible=!sidebarVisible;
@@ -720,6 +1131,24 @@ async function deleteMapFromCloud(id){
   await sb.from('webmaps').delete().eq('user_id',currentUser.id).eq('map_id',id);
 }
 
+/* ── 色ピッカー初期化 ── */
+function initColorPickers(){
+  const textPicker=document.getElementById('fmt-text-color');
+  textPicker.style.display='flex';
+  textPicker.innerHTML=TEXT_COLORS.map(c=>`<div style="width:20px;height:20px;border-radius:50%;background:${c};border:0.5px solid rgba(0,0,0,0.1);cursor:pointer;" onclick="setNodeTextColor('${c}')" title="${c}"></div>`).join('');
+  textPicker.style.display='none';
+  
+  const bgPicker=document.getElementById('fmt-bg-color');
+  bgPicker.style.display='flex';
+  bgPicker.innerHTML=BG_COLORS.map(c=>`<div style="width:20px;height:20px;border-radius:50%;background:${c};border:1px solid rgba(0,0,0,0.2);cursor:pointer;" onclick="setNodeBgColor('${c}')" title="${c}"></div>`).join('');
+  bgPicker.style.display='none';
+  
+  const borderPicker=document.getElementById('fmt-border-color');
+  borderPicker.style.display='flex';
+  borderPicker.innerHTML=BORDER_COLORS.map(c=>`<div style="width:20px;height:20px;border-radius:50%;background:${c};border:1px solid rgba(0,0,0,0.2);cursor:pointer;" onclick="setNodeBorderColor('${c}')" title="${c}"></div>`).join('');
+  borderPicker.style.display='none';
+}
+
 /* ── INIT ── */
 async function init(){
   const {data:{session}}=await sb.auth.getSession();
@@ -746,6 +1175,7 @@ sb.auth.onAuthStateChange((event,session)=>{
 
 window.addEventListener('resize',()=>{ applyTransform(); });
 window.addEventListener('beforeunload',saveCurrent);
+initColorPickers();
 init();
 </script>
 </body>
