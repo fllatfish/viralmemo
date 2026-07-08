@@ -401,23 +401,55 @@ function buildNodeEl(n){
   div.className='wm-node'+(n.starter?' starter':'');
   div.id='n'+n.id;
   div.style.left=n.x+'px'; div.style.top=n.y+'px'; div.style.background=n.color||PALETTE[0];
-  if(n.borderColor){ div.style.borderColor=n.borderColor; div.style.borderWidth='2px'; }
+  if(n.borderColor){ div.style.borderColor=n.borderColor; div.style.borderWidth='2.5px'; }
   div.onmousedown=(e)=>startDragNode(e,n.id);
-  div.innerHTML=`
-    <div class="wm-node-tools">
-      ${BG_COLORS.map(c=>`<div class="node-color-dot" style="background:${c}" title="背景: ${c}" onmousedown="event.stopPropagation()" onclick="setNodeBgColor(${n.id},'${c}')"></div>`).join('')}
-      <div class="node-sep"></div>
-      ${BORDER_COLORS.map(c=>{const ring=c==='#ffffff'?'#ccc':c;return `<div class="node-color-dot" style="background:${c};box-shadow:0 0 0 2px ${ring} inset" title="枠線: ${c}" onmousedown="event.stopPropagation()" onclick="setNodeBorderColor(${n.id},'${c}')"></div>`;}).join('')}
-      <div class="node-sep"></div>
-      <button class="wm-tool-btn del" title="削除" onmousedown="event.stopPropagation()" onclick="deleteNode(${n.id})">✕</button>
-    </div>
-    <div class="wm-node-body" id="t${n.id}" contenteditable="false" data-placeholder="アイデアを入力…"
-      ondblclick="enterEdit(this,${n.id});event.stopPropagation()"
-      onblur="commitEdit(this,${n.id})"
-      onmousedown="if(this.getAttribute('contenteditable')==='true')event.stopPropagation()"
-      onkeydown="if(event.key==='Escape'){this.blur();}">${n.html||esc(n.text)}</div>
-    <div class="wm-handle" title="ドラッグして線をつなぐ" onmousedown="startConnect(event,${n.id})"></div>
-  `;
+
+  // ツールバー
+  const tools=document.createElement('div');
+  tools.className='wm-node-tools';
+  BG_COLORS.forEach(c=>{
+    const dot=document.createElement('div');
+    dot.className='node-color-dot'; dot.style.background=c; dot.title='背景: '+c;
+    dot.onmousedown=e=>e.stopPropagation();
+    dot.onclick=()=>setNodeBgColor(n.id,c);
+    tools.appendChild(dot);
+  });
+  const sep1=document.createElement('div'); sep1.className='node-sep'; tools.appendChild(sep1);
+  BORDER_COLORS.forEach(c=>{
+    const dot=document.createElement('div');
+    dot.className='node-color-dot';
+    dot.style.background=c;
+    dot.style.boxShadow='0 0 0 2px '+(c==='#ffffff'?'#ccc':c)+' inset';
+    dot.title='枠線: '+c;
+    dot.onmousedown=e=>e.stopPropagation();
+    dot.onclick=()=>setNodeBorderColor(n.id,c);
+    tools.appendChild(dot);
+  });
+  const sep2=document.createElement('div'); sep2.className='node-sep'; tools.appendChild(sep2);
+  const delBtn=document.createElement('button');
+  delBtn.className='wm-tool-btn del'; delBtn.title='削除'; delBtn.textContent='✕';
+  delBtn.onmousedown=e=>e.stopPropagation(); delBtn.onclick=()=>deleteNode(n.id);
+  tools.appendChild(delBtn);
+  div.appendChild(tools);
+
+  // テキスト
+  const body=document.createElement('div');
+  body.className='wm-node-body'; body.id='t'+n.id;
+  body.setAttribute('contenteditable','false');
+  body.setAttribute('data-placeholder','アイデアを入力…');
+  body.innerHTML=n.html||esc(n.text);
+  body.ondblclick=e=>{ enterEdit(body,n.id); e.stopPropagation(); };
+  body.onblur=()=>commitEdit(body,n.id);
+  body.onmousedown=e=>{ if(body.getAttribute('contenteditable')==='true') e.stopPropagation(); };
+  body.onkeydown=e=>{ if(e.key==='Escape') body.blur(); };
+  div.appendChild(body);
+
+  // 接続ハンドル
+  const handle=document.createElement('div');
+  handle.className='wm-handle'; handle.title='ドラッグして線をつなぐ';
+  handle.onmousedown=e=>startConnect(e,n.id);
+  div.appendChild(handle);
+
   return div;
 }
 
