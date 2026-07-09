@@ -192,7 +192,8 @@ header{padding:10px 14px;border-bottom:0.5px solid var(--border);display:flex;al
   <div class="map-list" id="map-list"></div>
   <div class="sidebar-footer">
     <div class="sync-status" id="sync-status"></div>
-    <button class="new-map-btn" onclick="newMap(null,true)">＋ 新しいマップ</button>
+    <button id="new-map-btn" class="new-map-btn" onclick="newMap(null,true)">＋ 新しいマップ</button>
+    <button id="room-map-btn" class="new-map-btn" onclick="newRoomMap()" style="display:none;border-color:var(--accent);color:var(--accent);">＋ マップを追加</button>
     <button class="new-map-btn" onclick="openRoomModal()" style="border-color:var(--accent);color:var(--accent);">🕸️ 共有ルーム</button>
     <button class="logout-btn" onclick="logout()">ログアウト</button>
   </div>
@@ -344,6 +345,7 @@ function saveCurrent(){
 }
 
 function onTitleInput(){
+  if(currentRoomCode){ onRoomTitleInput(); return; }
   const map=getCurrentMap(); if(!map) return;
   map.title=document.getElementById('map-title-input').value;
   renderSidebar();
@@ -749,7 +751,7 @@ function fitToView(){
 /* ── 共有ルーム ── */
 let currentRoomCode=null, currentRoomTitle=null;
 let roomSubscription=null;
-let roomMembers=[];
+let roomMaps=[], currentRoomMapId=null, nextRoomMapId=1;
 
 function generateRoomCode(){
   const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -885,73 +887,169 @@ function updateRoomUI(){
   const titleInput=document.getElementById('map-title-input');
   const mapList=document.getElementById('map-list');
   const sidebarFooter=document.querySelector('.sidebar-footer');
+  const newMapBtn=document.getElementById('new-map-btn');
+  const roomMapBtn=document.getElementById('room-map-btn');
   if(currentRoomCode){
     indicator.style.display='flex';
     document.getElementById('room-indicator-name').textContent=currentRoomTitle||'共有ルーム';
     fab.style.display='flex';
-    titleInput.value=currentRoomTitle||'共有ルーム';
-    titleInput.disabled=true;
-    if(mapList) mapList.style.display='none';
-    if(sidebarFooter) sidebarFooter.style.display='none';
-    document.getElementById('sidebar').classList.add('hidden');
-    document.getElementById('main').classList.add('full');
-    sidebarVisible=false;
+    titleInput.disabled=false;
+    // サイドバーをルーム用に切り替え
+    if(newMapBtn) newMapBtn.style.display='none';
+    if(roomMapBtn) roomMapBtn.style.display='flex';
+    document.getElementById('sidebar').classList.remove('hidden');
+    document.getElementById('main').classList.remove('full');
+    sidebarVisible=true;
+    renderRoomSidebar();
   }else{
     indicator.style.display='none';
     fab.style.display='none';
     if(titleInput) titleInput.disabled=false;
-    if(mapList) mapList.style.display='';
-    if(sidebarFooter) sidebarFooter.style.display='';
+    if(newMapBtn) newMapBtn.style.display='flex';
+    if(roomMapBtn) roomMapBtn.style.display='none';
     document.getElementById('sidebar').classList.remove('hidden');
     document.getElementById('main').classList.remove('full');
     sidebarVisible=true;
+    renderSidebar();
   }
+}
+
+function renderRoomSidebar(){
+  const list=document.getElementById('map-list');
+  list.innerHTML=roomMaps.map(m=>`
+    <div class="map-item ${m.id===currentRoomMapId?'active':''}" onclick="switchRoomMap(${m.id})">
+      <span class="map-item-icon" style="background:var(--accent)"></span>
+      <span class="map-item-title">${esc(m.title)||'無題のマップ'}</span>
+      <button class="map-del" onclick="deleteRoomMap(${m.id},event)" title="削除">✕</button>
+    </div>
+  `).join('');
+}
+
+function switchRoomMap(id){
+  if(id===currentRoomMapId) return;
+  syncRoomData().then(()=>{
+    currentRoomMapId=id;
+    loadRoomData();
+  });
+}
+
+async function newRoomMap(){
+  const id=nextRoomMapId++;
+  const rootId=nuid();
+  const newMap={id, title:'新しいマップ', nodes:[{id:rootId,x:Math.round(WORLD_W/2-80),y:Math.round(WORLD_H/2-24),text:'メインテーマ',html:'メインテーマ',color:PALETTE[0],starter:true}], edges:[], nextNodeId:nuid(), nextEdgeId:euid()};
+  roomMaps.push(newMap);
+  currentRoomMapId=id;
+  nodes=newMap.nodes; edges=newMap.edges; nextNodeId=newMap.nextNodeId; nextEdgeId=newMap.nextEdgeId;
+  renderCanvas(); centerView();
+  renderRoomSidebar();
+  await syncRoomMeta();
+  await syncRoomData();
+}
+
+async function deleteRoomMap(id,ev){
+  if(ev) ev.stopPropagation();
+  if(roomMaps.length<=1){ alert('最後のマップは削除できません'); return; }
+  if(!confirm('このマップを削除しますか？')) return;
+  // DB から削除
+  await sb.from('webmap_room_data').delete().eq('room_code',currentRoomCode).eq('map_id',id);
+  roomMaps=roomMaps.filter(m=>m.id!==id);
+  if(currentRoomMapId===id) currentRoomMapId=roomMaps[0].id;
+  loadRoomData();
+  renderRoomSidebar();
+  await syncRoomMeta();
+}
+
+function onRoomTitleInput(){
+  const m=roomMaps.find(m=>m.id===currentRoomMapId); if(!m) return;
+  m.title=document.getElementById('map-title-input').value;
+  renderRoomSidebar();
+  clearTimeout(window.__syncTimer);
+  window.__syncTimer=setTimeout(()=>{ syncRoomMeta(); syncRoomData(); },1500);
+}
+
+async function syncRoomMeta(){
+  if(!currentRoomCode||!currentUser) return;
+  try{
+    await sb.from('webmap_rooms').update({
+      room_meta: JSON.stringify({maps: roomMaps.map(m=>({id:m.id,title:m.title})), nextRoomMapId}),
+      updated_at: new Date().toISOString()
+    }).eq('code',currentRoomCode);
+  }catch(e){ console.error('meta sync error',e); }
 }
 
 async function watchRoom(){
   if(!currentRoomCode) return;
   if(roomSubscription){ roomSubscription.unsubscribe(); }
   roomSubscription=sb.channel(`webmap-room:${currentRoomCode}`)
-    .on('postgres_changes',{
-      event:'*',
-      schema:'public',
-      table:'webmap_room_data',
-      filter:`room_code=eq.${currentRoomCode}`
-    },(payload)=>{
-      if(payload.eventType==='INSERT'||payload.eventType==='UPDATE'){
-        loadRoomData();
-      }else if(payload.eventType==='DELETE'){
-        loadRoomData();
-      }
-    }).subscribe();
-  loadRoomData();
+    .on('postgres_changes',{event:'*',schema:'public',table:'webmap_room_data',
+      filter:`room_code=eq.${currentRoomCode}`},(payload)=>{ loadRoomData(); })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'webmap_rooms',
+      filter:`code=eq.${currentRoomCode}`},(payload)=>{ applyRoomMeta(payload.new); })
+    .subscribe();
+  // 初回: メタ情報→マップリスト読み込み
+  const {data}=await sb.from('webmap_rooms').select('room_meta').eq('code',currentRoomCode).single();
+  const meta=data?.room_meta ? JSON.parse(data.room_meta) : null;
+  if(meta && meta.maps && meta.maps.length){
+    roomMaps=meta.maps.map(m=>({...m,nodes:[],edges:[]}));
+    nextRoomMapId=meta.nextRoomMapId||roomMaps.length+1;
+    currentRoomMapId=roomMaps[0].id;
+  }else{
+    // 初回作成: デフォルトマップ1枚
+    const rootId=nuid();
+    roomMaps=[{id:1,title:'マップ 1',nodes:[{id:rootId,x:Math.round(WORLD_W/2-80),y:Math.round(WORLD_H/2-24),text:'メインテーマ',html:'メインテーマ',color:PALETTE[0],starter:true}],edges:[],nextNodeId:nuid(),nextEdgeId:euid()}];
+    nextRoomMapId=2; currentRoomMapId=1;
+    await syncRoomMeta();
+  }
+  updateRoomUI();
+  await loadRoomData();
+}
+
+function applyRoomMeta(row){
+  if(!row.room_meta) return;
+  const meta=JSON.parse(row.room_meta);
+  if(!meta.maps) return;
+  // 既存マップのデータは保持しつつタイトルのみ更新
+  const prev=Object.fromEntries(roomMaps.map(m=>[m.id,m]));
+  roomMaps=meta.maps.map(m=>({...(prev[m.id]||{}), id:m.id, title:m.title}));
+  nextRoomMapId=meta.nextRoomMapId||roomMaps.length+1;
+  if(!roomMaps.find(m=>m.id===currentRoomMapId)) currentRoomMapId=roomMaps[0].id;
+  renderRoomSidebar();
 }
 
 async function loadRoomData(){
-  if(!currentRoomCode) return;
+  if(!currentRoomCode||currentRoomMapId===null) return;
   try{
     const {data,error}=await sb.from('webmap_room_data')
-      .select('*')
-      .eq('room_code',currentRoomCode)
-      .single();
+      .select('*').eq('room_code',currentRoomCode).eq('map_id',currentRoomMapId).single();
+    const m=roomMaps.find(m=>m.id===currentRoomMapId);
     if(error){
       if(error.code!=='PGRST116') console.error(error);
       nodes=[]; edges=[]; nextNodeId=100; nextEdgeId=100;
+      if(m){ m.nodes=[]; m.edges=[]; }
     }else if(data){
       nodes=data.nodes||[]; edges=data.edges||[];
       nextNodeId=data.next_node_id||100; nextEdgeId=data.next_edge_id||100;
+      if(m){ m.nodes=nodes; m.edges=edges; m.nextNodeId=nextNodeId; m.nextEdgeId=nextEdgeId; }
     }
+    document.getElementById('map-title-input').value=m?.title||'';
     renderCanvas();
+    centerView();
+    renderRoomSidebar();
     setSyncStatus('✓ 共有中');
   }catch(e){ console.error(e); }
 }
 
 async function syncRoomData(){
-  if(!currentRoomCode||!currentUser) return;
+  if(!currentRoomCode||!currentUser||currentRoomMapId===null) return;
+  // 現在のマップをroomMapsにも反映
+  const m=roomMaps.find(m=>m.id===currentRoomMapId);
+  if(m){ m.nodes=nodes; m.edges=edges; m.nextNodeId=nextNodeId; m.nextEdgeId=nextEdgeId; }
   try{
     const {error}=await sb.from('webmap_room_data').upsert({
-      room_code:currentRoomCode, nodes, edges, next_node_id:nextNodeId, next_edge_id:nextEdgeId, updated_at:new Date().toISOString()
-    },{onConflict:'room_code'});
+      room_code:currentRoomCode, map_id:currentRoomMapId,
+      nodes, edges, next_node_id:nextNodeId, next_edge_id:nextEdgeId,
+      updated_at:new Date().toISOString()
+    },{onConflict:'room_code,map_id'});
     if(error) throw error;
   }catch(e){ console.error('ルーム同期エラー',e); }
 }
