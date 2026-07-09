@@ -98,12 +98,12 @@ header{padding:10px 14px;border-bottom:0.5px solid var(--border);display:flex;al
 .wm-tool-btn:hover{background:var(--surface);}
 .wm-tool-btn.del:hover{background:var(--danger);color:#fff;}
 .node-sep{width:0.5px;height:14px;background:rgba(0,0,0,0.12);margin:0 1px;align-self:center;}
+.node-color-group{position:relative;display:flex;align-items:center;}
 .node-palette{position:absolute;top:28px;left:50%;transform:translateX(-50%);background:#fff;border:0.5px solid #d3ccc0;border-radius:8px;padding:6px;display:none;gap:5px;flex-wrap:wrap;width:136px;z-index:10;box-shadow:0 2px 10px rgba(0,0,0,0.14);}
 .node-palette.open{display:flex;}
 .node-palette-dot{width:18px;height:18px;border-radius:50%;cursor:pointer;border:1.5px solid rgba(0,0,0,0.12);flex-shrink:0;transition:transform 0.12s;}
 .node-palette-dot:hover{transform:scale(1.25);}
-.node-palette-dot.border-style{border-radius:3px;}
-.node-color-group{position:relative;display:flex;align-items:center;}
+.node-palette-dot.square{border-radius:3px;}
 .wm-handle{position:absolute;right:-9px;top:50%;transform:translateY(-50%);width:16px;height:16px;border-radius:50%;
   background:var(--accent);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);cursor:crosshair;display:none;z-index:2;}
 .wm-node:hover .wm-handle{display:block;}
@@ -416,21 +416,22 @@ function buildNodeEl(n){
   const tools=document.createElement('div');
   tools.className='wm-node-tools';
 
-  function makeColorGroup(colors, makeIcon, applyFn, label){
+
+  function makeColorGroup(colors, iconSVG, applyFn, isSquare){
     const group=document.createElement('div');
     group.className='node-color-group';
     const btn=document.createElement('button');
-    btn.className='wm-tool-btn'; btn.title=label;
-    btn.innerHTML=makeIcon;
+    btn.className='wm-tool-btn'; btn.innerHTML=iconSVG;
     const palette=document.createElement('div');
     palette.className='node-palette';
-    colors.forEach(c=>{
+    colors.forEach(col=>{
       const dot=document.createElement('div');
-      dot.className='node-palette-dot'+(label==='枠線色'?' border-style':'');
-      dot.style.background=c;
-      if(label==='枠線色') dot.style.border='2.5px solid '+(c==='#ffffff'?'#ccc':c);
-      dot.title=c; dot.onmousedown=e=>e.stopPropagation();
-      dot.onclick=()=>{ applyFn(n.id,c); palette.classList.remove('open'); };
+      dot.className='node-palette-dot'+(isSquare?' square':'');
+      dot.style.background=col;
+      if(isSquare) dot.style.border='2.5px solid '+(col==='#ffffff'?'#ccc':col);
+      dot.title=col;
+      dot.onmousedown=e=>e.stopPropagation();
+      dot.onclick=()=>{ applyFn(n.id,col); palette.classList.remove('open'); };
       palette.appendChild(dot);
     });
     btn.onmousedown=e=>e.stopPropagation();
@@ -444,12 +445,12 @@ function buildNodeEl(n){
   }
 
   tools.appendChild(makeColorGroup(BG_COLORS,
-    '<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 10 L5 2 L8 10 M3.5 7 h3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>',
-    setNodeBgColor, '背景色'));
+    '<svg width="12" height="12" viewBox="0 0 12 12"><rect x="3" y="1" width="4" height="6" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M4 7 L3.5 10 L6 11 L8.5 10 L8 7" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/><line x1="6" y1="10.5" x2="6" y2="12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+    setNodeBgColor, false));
   const sep1=document.createElement('div'); sep1.className='node-sep'; tools.appendChild(sep1);
   tools.appendChild(makeColorGroup(BORDER_COLORS,
     '<svg width="12" height="12" viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>',
-    setNodeBorderColor, '枠線色'));
+    setNodeBorderColor, true));
   const sep2=document.createElement('div'); sep2.className='node-sep'; tools.appendChild(sep2);
   const delBtn=document.createElement('button');
   delBtn.className='wm-tool-btn del'; delBtn.title='削除'; delBtn.textContent='✕';
