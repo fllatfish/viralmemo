@@ -97,9 +97,13 @@ header{padding:10px 14px;border-bottom:0.5px solid var(--border);display:flex;al
 .wm-tool-btn{width:22px;height:22px;border-radius:50%;border:1px solid rgba(0,0,0,0.1);background:#fff;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.18);color:#6f6559;flex-shrink:0;}
 .wm-tool-btn:hover{background:var(--surface);}
 .wm-tool-btn.del:hover{background:var(--danger);color:#fff;}
-.node-color-dot{width:14px;height:14px;border-radius:50%;cursor:pointer;border:1.5px solid rgba(0,0,0,0.15);flex-shrink:0;transition:transform 0.1s;}
-.node-color-dot:hover{transform:scale(1.25);}
 .node-sep{width:0.5px;height:14px;background:rgba(0,0,0,0.12);margin:0 1px;align-self:center;}
+.node-palette{position:absolute;top:28px;left:50%;transform:translateX(-50%);background:#fff;border:0.5px solid #d3ccc0;border-radius:8px;padding:6px;display:none;gap:5px;flex-wrap:wrap;width:136px;z-index:10;box-shadow:0 2px 10px rgba(0,0,0,0.14);}
+.node-palette.open{display:flex;}
+.node-palette-dot{width:18px;height:18px;border-radius:50%;cursor:pointer;border:1.5px solid rgba(0,0,0,0.12);flex-shrink:0;transition:transform 0.12s;}
+.node-palette-dot:hover{transform:scale(1.25);}
+.node-palette-dot.border-style{border-radius:3px;}
+.node-color-group{position:relative;display:flex;align-items:center;}
 .wm-handle{position:absolute;right:-9px;top:50%;transform:translateY(-50%);width:16px;height:16px;border-radius:50%;
   background:var(--accent);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);cursor:crosshair;display:none;z-index:2;}
 .wm-node:hover .wm-handle{display:block;}
@@ -409,24 +413,41 @@ function buildNodeEl(n){
   // ツールバー
   const tools=document.createElement('div');
   tools.className='wm-node-tools';
-  BG_COLORS.forEach(c=>{
-    const dot=document.createElement('div');
-    dot.className='node-color-dot'; dot.style.background=c; dot.title='背景: '+c;
-    dot.onmousedown=e=>e.stopPropagation();
-    dot.onclick=()=>setNodeBgColor(n.id,c);
-    tools.appendChild(dot);
-  });
+
+  function makeColorGroup(colors, makeIcon, applyFn, label){
+    const group=document.createElement('div');
+    group.className='node-color-group';
+    const btn=document.createElement('button');
+    btn.className='wm-tool-btn'; btn.title=label;
+    btn.innerHTML=makeIcon;
+    const palette=document.createElement('div');
+    palette.className='node-palette';
+    colors.forEach(c=>{
+      const dot=document.createElement('div');
+      dot.className='node-palette-dot'+(label==='枠線色'?' border-style':'');
+      dot.style.background=c;
+      if(label==='枠線色') dot.style.border='2.5px solid '+(c==='#ffffff'?'#ccc':c);
+      dot.title=c; dot.onmousedown=e=>e.stopPropagation();
+      dot.onclick=()=>{ applyFn(n.id,c); palette.classList.remove('open'); };
+      palette.appendChild(dot);
+    });
+    btn.onmousedown=e=>e.stopPropagation();
+    btn.onclick=e=>{
+      e.stopPropagation();
+      document.querySelectorAll('.node-palette.open').forEach(p=>{ if(p!==palette) p.classList.remove('open'); });
+      palette.classList.toggle('open');
+    };
+    group.appendChild(btn); group.appendChild(palette);
+    return group;
+  }
+
+  tools.appendChild(makeColorGroup(BG_COLORS,
+    '<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 10 L5 2 L8 10 M3.5 7 h3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>',
+    setNodeBgColor, '背景色'));
   const sep1=document.createElement('div'); sep1.className='node-sep'; tools.appendChild(sep1);
-  BORDER_COLORS.forEach(c=>{
-    const dot=document.createElement('div');
-    dot.className='node-color-dot';
-    dot.style.background=c;
-    dot.style.boxShadow='0 0 0 2px '+(c==='#ffffff'?'#ccc':c)+' inset';
-    dot.title='枠線: '+c;
-    dot.onmousedown=e=>e.stopPropagation();
-    dot.onclick=()=>setNodeBorderColor(n.id,c);
-    tools.appendChild(dot);
-  });
+  tools.appendChild(makeColorGroup(BORDER_COLORS,
+    '<svg width="12" height="12" viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>',
+    setNodeBorderColor, '枠線色'));
   const sep2=document.createElement('div'); sep2.className='node-sep'; tools.appendChild(sep2);
   const delBtn=document.createElement('button');
   delBtn.className='wm-tool-btn del'; delBtn.title='削除'; delBtn.textContent='✕';
@@ -668,6 +689,12 @@ function snapshotAfterMove(id,origX,origY){
 }
 
 /* ダブルクリックで新規ノード */
+document.addEventListener('mousedown',(e)=>{
+  if(!e.target.closest('.node-color-group')){
+    document.querySelectorAll('.node-palette.open').forEach(p=>p.classList.remove('open'));
+  }
+},true);
+
 document.getElementById('viewport').addEventListener('dblclick',(e)=>{
   if(e.target.closest('.wm-node')) return;
   const vp=document.getElementById('viewport').getBoundingClientRect();
